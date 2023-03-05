@@ -22,7 +22,7 @@
  */
 ConnectInfo_t * decode_params(char *argv[]){
     ConnectInfo_t * info;
-    info = malloc(sizeof(ConnectInfo_t));
+    info = malloc(sizeof(ConnectInfo_t)); 
     if(info == NULL){
         #ifdef DEBUG
         printf("[ERROR] Malloc failure\n");
