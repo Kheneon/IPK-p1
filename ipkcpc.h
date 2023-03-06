@@ -21,6 +21,7 @@ typedef enum{
     PARAM_ERROR,
     SOCKET_FAILURE,
     SENDTO_FAILURE,
+    GET_HOST_NAME_FAILURE,
     INTERNAL_ERROR = 99
 } EXIT_STATUSES;
 
@@ -32,7 +33,7 @@ struct ConnectionInfo{
 };
 
 void decode_ip(ConnectInfo_t * info, char *ip);
-ConnectInfo_t * decode_params(char *argv[]);
+ConnectInfo_t * decode_params(int argc,char *argv[]);
 void struct_dtor(ConnectInfo_t * info);
 void decode_port(ConnectInfo_t * info, char * port);
 void decode_mode(ConnectInfo_t * info, char * mode);

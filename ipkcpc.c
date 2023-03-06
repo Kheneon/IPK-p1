@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include "ipkcpc.h"
 
 #define DEBUG
@@ -20,7 +21,7 @@
  * @param argv Arguments from command line
  * @return ConnectInfo_t* Connection structure
  */
-ConnectInfo_t * decode_params(char *argv[]){
+ConnectInfo_t * decode_params(int argc, char *argv[]){
     ConnectInfo_t * info;
     info = malloc(sizeof(ConnectInfo_t)); 
     if(info == NULL){
@@ -31,95 +32,52 @@ ConnectInfo_t * decode_params(char *argv[]){
     }
     info->IPv4 = NULL;
     info->port = NULL;
-    if(strcmp(argv[1],"-h") == 0){
-        decode_ip(info,argv[2]);
-        if(strcmp(argv[3],"-m") == 0){
-            decode_mode(info,argv[4]);
-            if(strcmp(argv[5],"-p") == 0){
-                decode_port(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
-        }else if(strcmp(argv[3],"-p") == 0){
-            decode_port(info,argv[3]);
-            if(strcmp(argv[5],"-m") == 0){
-                decode_mode(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
+
+    if(argc < 2){
+        return info;
+    }
+
+    if(strcmp(argv[1],"--help") == 0){
+        printf(
+        "ipkcpc [options] [details] ...\n\n"
+        "OPTIONS\n"
+        "\t-h [IP]\n"
+        "\t\tSpecify IP address of server to communicate to\n"
+        "\t\t[0.0.0.0 by default]\n"
+        "\t-m [mode]\n"
+        "\t\tSpecify mode of connection. TCP or UDP\n"
+        "\t\t[TCP by default]\n"
+        "\t-p [port]\n"
+        "\t\tSpecify port for connection.\n"
+        "\t\t[2023 by default]\n\n"
+        "DETAILS\n"
+        "\tIP\n"
+        "\t\tIPv4 address in form \"x.x.x.x\"\n"
+        "\t\twhere x is in range <0,255>\n"
+        "\tmode\n"
+        "\t\tMode of connection. TCP or UDP\n"
+        "\tport\n"
+        "\t\tPort where it connects to. Number in range <0,65535>\n\n"
+        "Author:  Michal Zapletal\n"
+        "Contact: xzaple41@stud.fit.vutbr.cz\n"
+        );
+        exit(ALL_OK);
+    }
+
+    for(int i = 1; i < argc ;){
+        if(strcmp(argv[i],"-h") == 0){
+            decode_ip(info, argv[i+1]);
+        }else if(strcmp(argv[i],"-m") == 0){
+            decode_mode(info,argv[i+1]);
+        }else if(strcmp(argv[i],"-h") == 0){
+            decode_port(info,argv[i+1]);
         }else{
             #ifdef DEBUG
-            printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
+            printf("[ERROR] Unknown settings\"%s\"\n",argv[i]);
             #endif
             exit(PARAM_ERROR);
         }
-    }else if(strcmp(argv[1],"-m") == 0){
-        decode_mode(info,argv[2]);
-        if(strcmp(argv[3],"-h") == 0){
-            decode_ip(info,argv[4]);
-            if(strcmp(argv[5],"-p") == 0){
-                decode_port(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
-        }else if(strcmp(argv[3],"-p") == 0){
-            decode_port(info,argv[3]);
-            if(strcmp(argv[5],"-h") == 0){
-                decode_ip(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
-        }else{
-            #ifdef DEBUG
-            printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-            #endif
-            exit(PARAM_ERROR);
-        }
-    }else if(strcmp(argv[1],"-p") == 0){
-        decode_ip(info,argv[2]);
-        if(strcmp(argv[3],"-m") == 0){
-            decode_mode(info,argv[4]);
-            if(strcmp(argv[5],"-h") == 0){
-                decode_ip(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
-        }else if(strcmp(argv[3],"-h") == 0){
-            decode_ip(info,argv[3]);
-            if(strcmp(argv[5],"-m") == 0){
-                decode_mode(info,argv[6]);
-            }else{
-                #ifdef DEBUG
-                printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-                #endif
-                exit(PARAM_ERROR);
-            }
-        }else{
-            #ifdef DEBUG
-            printf("[ERROR] Unknown setting \"%s\"\n",argv[3]);
-            #endif
-            exit(PARAM_ERROR);
-        }
-    }else{
-        #ifdef DEBUG
-        printf("[ERROR] Unknown setting \"%s\"\n",argv[1]);
-        #endif
-        exit(PARAM_ERROR);
+        i = i+2;
     }
     return info;
 }
@@ -317,9 +275,9 @@ void struct_dtor(ConnectInfo_t * info){
     }
 }
 
-void send_socket(ConnectInfo_t * info, char * message){
+int create_socket(){
     int family = AF_INET;
-    int type = SOCK_DGRAM;
+    int type = SOCK_STREAM;
     int client_socket = socket(family, type, 0);
     if(client_socket <= 0){
         #ifdef DEBUG
@@ -327,9 +285,43 @@ void send_socket(ConnectInfo_t * info, char * message){
         #endif
         exit(SOCKET_FAILURE);
     }
+    return client_socket;
+}
 
-    struct sockaddr * address = (struct sockaddr *) &(info->IPv4);
-    int address_size = sizeof(info->IPv4);
+/**
+ * @brief 
+ * 
+ * @param info Connection structure
+ * @param message Message to be sent
+ */
+void send_message_tcp(ConnectInfo_t * info, char * message){
+    int client_socket = create_socket();
+
+    struct sockaddr_in server_addr;
+    socklen_t address_size;
+
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = &(info->port);
+    server_addr.sin_addr.s_addr = inet_addr(info->IPv4);
+
+    if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0){
+        printf("Unable to connect\n");
+        return -1;
+    }
+    printf("Connected with server successfully\n");
+
+    /*struct hostent *server = gethostbyname(info->IPv4);
+    if(server == NULL){
+        #ifdef DEBUG
+        printf("[ERROR] Get host name failure");
+        #endif
+        exit(GET_HOST_NAME_FAILURE);
+    }
+
+    struct sockaddr_in server_adress;
+
+    struct sockaddr * address = (struct sockaddr *) &(server_adress);
+    int address_size = sizeof(server_adress);
     int flags = 0;
     int bytes_tx = sendto(client_socket,message,strlen(message),flags,address,address_size);
     if(bytes_tx < 0){
@@ -337,18 +329,12 @@ void send_socket(ConnectInfo_t * info, char * message){
         printf("[ERROR] sendto failure\n");
         #endif
         exit(SENDTO_FAILURE);
-    }
+    }*/
 }
 
 int main(int argc, char *argv[]){
-    if(argc < 7 || argc > 7){
-        #ifdef DEBUG
-        printf("[ERROR] Wrong number of parameters\n");
-        #endif
-        exit(PARAM_ERROR);
-    }
     ConnectInfo_t * info;
-    info = decode_params(argv);
+    info = decode_params(argc,argv);
 
     #ifdef DEBUG
     printf("IP:   %s\n",info->IPv4);
@@ -360,7 +346,7 @@ int main(int argc, char *argv[]){
     }
     #endif
 
-    send_socket(info,"HELLO");
+    send_message_tcp(info,"HELLO");
 
 
     struct_dtor(info);
